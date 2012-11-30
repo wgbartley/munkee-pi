@@ -1,0 +1,204 @@
+# Resources
+# http://www.cnx-software.com/2012/07/31/84-mb-minimal-raspbian-armhf-image-for-raspberry-pi/
+# http://raspberrypi.stackexchange.com/questions/855/is-it-possible-to-update-upgrade-and-install-software-before-flashing-an-image
+# http://www.raspberrypi.org/phpBB3/viewtopic.php?t=13962&p=171202
+# http://xecdesign.com/qemu-emulating-raspberry-pi-the-easy-way/
+
+# Make a build dir
+mkdir -p ~/RaspberryPi/automagic/mount
+
+
+# Get necessary dependencies
+sudo apt-get install git qemu qemu-system kpartx unzip binfmt-support qemu-user-static secure-delete
+
+
+# Get Occidentalis and unzip
+wget http://adafruit-raspberry-pi.s3.amazonaws.com/Occidentalisv02.zip
+unzip Occidentalisv02.zip
+rm Occidentalisv02.zip
+
+
+# Get and mount the partitions
+sudo kpartx -av ~/RaspberryPi/automagic/Occendentalis_v02.img
+# Look for "add map loopXpY" and use for the following command
+sudo mount /dev/mapper/loopXp2 ~/RaspberryPi/automagic/mount
+sudo mount /dev/mapper/loopXp1 ~/RaspberryPi/automagic/mount/boot
+
+
+# Almost there
+sudo cp /usr/bin/qemu-arm-static ~/RaspberryPi/automagic/mount/usr/bin/
+
+
+# Additional mount points
+sudo mount --rbind /dev ~/RaspberryPi/automagic/mount/dev
+sudo mount -t proc none ~/RaspberryPi/automagic/mount/proc
+sudo mount -o bind /sys ~/RaspberryPi/automagic/mount/sys
+
+
+# Custom stuffs
+# Do not show raspi-config on launch
+rm -f ~/RaspberryPi/automagic/mount/etc/profile.d/raspi-config.sh
+
+# Add custom motd on login
+cp ~/RaspberryPi/automagic/custom-motd.sh ~/RaspberryPi/automagic/mount/etc/profile.d/motd.sh
+
+# Custom first boot script
+cp ~/RaspberryPi/automagic/custom-bootonce.sh ~/RaspberryPi/automagic/mount/etc/init.d/bootonce
+
+
+# Chroot!
+sudo chroot ~/RaspberryPi/automagic/mount
+
+
+# Set up a decent resolv.conf
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+
+
+# Update the apt cache
+apt-get update
+
+
+# Clean the crap out of it -- 519+167 MB!
+apt-get purge xserver-common xinit x11-xserver-utils xinit libsmbclient x11-utils \
+	x11-common x11-xkb-utils xarchiver xauth xkb-data console-setup lightdm \
+	libx{composite,cb,cursor,damage,dmcp,ext,font,ft,i,inerama,kbfile,klavier,mu,pm,randr,render,res,t,xf86}* \
+	lxde* lx{input,menu-data,panel,polkit,randr,session,session-edit,shortcut,task,terminal} \
+	obconf openbox gtk* libgtk* python-pygame python-tk python3-tk scratch tsconf \
+	desktop-file-utils xdg-utils ttf-freefont ttf-dejavu-core samba-common \
+	raspberrypi-artwork python3 menu-xdg geoip-database fonts-freefont-ttf cifs-utils \
+	omxplayer nfs-common wget python netcat-traditional netcat-openbsd libgfortran3 \
+	libgeoip1 curl libfreetype6 git gcc-4.4-base:armhf gcc-4.5-base:armhf gcc-4.6-base:armhf \
+	ca-certificates libraspberrypi-doc xkb-data fonts-freefont-ttf locales manpages python2.7
+
+# Delete more crap -- 62.8+24.2 MB, 3.6+1.6 MB, 
+apt-get purge `dpkg --get-selections | grep "\-dev" | sed s/install//`
+apt-get purge `dpkg --get-selections | grep -v "deinstall" | grep sound | sed s/install//`
+
+
+# Perform upgrades -- 17.1 MB
+apt-get update
+apt-get upgrade
+
+
+# Clean out cache -- 2 MB
+rm -f /var/cache/debconf/*.dat-old
+
+
+# Clear out users -- 2 MB
+deluser pi
+rm -rf /home/pi
+
+
+# Delete /root/.rpi-firmware -- 107 MB
+rm -rf /root/.rpi-firmware
+
+
+# Remove more cruft -- 49+ MB
+rm -rf /lib/modules.bak
+rm -rf /boot.bak
+rm -f /boot/issue.txt
+rm -rf /opt
+rm -rf /srv
+echo "" > /etc/motd
+
+
+# Set a root password
+passwd root
+rpi
+rpi
+
+
+# Clean out apt stuff -- 40 MB
+apt-get clean
+rm -f /var/lib/apt/lists/archive.* /var/lib/apt/lists/mirrordirector.* /var/cache/apt/archives/*.deb
+
+
+# Delete the swap file -- 100 MB
+swapoff -a
+rm /var/swap
+
+
+# Clean out logs -- 9 MB
+rm -f /var/log/*.log /var/log/dmesg.* /var/log/syslog.* /var/backups/*.gz
+echo "" > /var/log/auth.log
+echo "" > /var/log/bootstrap.log
+echo "" > /var/log/daemon.log
+echo "" > /var/log/dpkg.log
+echo "" > /var/log/kern.log
+echo "" > /var/log/messages
+
+
+# More custom
+chmod +x /etc/profile.d/motd.sh
+chmod +x /etc/init.d/bootonce
+update-rc.d bootonce defaults
+
+
+echo "US/Eastern" > /etc/timezone
+dpkg-reconfigure -f noninteractive tzdata
+echo "LANG=enUS" > /etc/default/locale
+dpkg-reconfigure -f noninteractive locales
+
+echo "XKBMODEL=\"pc104\"" > /etc/default/keyboard
+echo "XKBLAYOUT=\"us\"" >> /etc/default/keyboard
+echo "XKBVARIANT=\"\"" >> /etc/default/keyboard
+echo "XKBOPTIONS=\"\"" >> /etc/default/keyboard
+echo "BACKSPACE=\"guess\"" >> /etc/default/keyboard
+dpkg-reconfigure -f noninteractive keyboard-configuration
+
+
+# Exit chroot
+exit
+
+
+# Final clean-up
+sudo rm -f ~/RaspberryPi/automagic/mount/usr/bin/qemu-arm-static ~/RaspberryPi/automagic/mount/root/.bash_history
+
+
+# Fill empty space with 0s
+sudo sfill -z -l -l -f ~/RaspberryPi/automagic/mount/boot
+sudo sfill -z -l -l -f ~/RaspberryPi/automagic/mount
+
+
+# Unmount
+cd ~/RaspberryPi/automagic
+sudo umount ~/RaspberryPi/automagic/mount/sys
+sudo umount ~/RaspberryPi/automagic/mount/proc
+sudo umount ~/RaspberryPi/automagic/mount/dev/pts
+sudo umount ~/RaspberryPi/automagic/mount/dev
+sudo umount ~/RaspberryPi/automagic/mount/boot
+sudo umount ~/RaspberryPi/automagic/mount/
+
+
+# Check the filesystem
+sudo e2fsck -fy /dev/mapper/loopXp2
+
+
+# Shrink the filesystem
+sudo resize2fs -M /dev/mapper/loopXp2
+# Note the new size
+# Take the new size, multiply by 4 and then multiply by 1.1 and round up
+# Mine came out to be 426704K
+sudo resize2fs /dev/mapper/loopXp2 <new size>K
+
+
+# Resize the partition
+sudo fdisk /dev/loop0
+
+# Delete partition
+d 2
+
+# Create new partition
+n p 2 122880 +<new size>K
+
+# Write
+w
+
+
+# Remove the image mapper mount stuff
+sudo kpartx -d ~/RaspberryPi/automagic/Occendentalis_v02.img
+
+
+# Make it smaller
+sudo dd if=~/RaspberryPi/automagic/Occendentalis_v02.img of=~/RaspberryPi/automagic/occ.shrink.img bs=1M count=500
