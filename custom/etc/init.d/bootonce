@@ -1,0 +1,56 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides: BootOnce
+# Required-Start:
+# Required-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop:
+# Short-Description: Scripts to run on first boot
+# Description:
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+case "$1" in
+  start)
+    log_daemon_msg "Starting bootonce"
+
+    # Get the starting offset of the root partition
+    PART_START=$(parted /dev/mmcblk0 -ms unit s p | grep "^2" | cut -f 2 -d:)
+    [ "$PART_START" ] || return 1
+    # Return value will likely be error for fdisk as it fails to reload the
+    # partition table because the root fs is mounted
+    fdisk /dev/mmcblk0 <<EOF
+p
+d
+2
+n
+p
+2
+$PART_START
+
+p
+w
+EOF
+    sync
+    sleep 1
+
+    # Enable the next script
+    chmod +x /etc/init.d/boottwice
+    update-rc.d boottwice defaults
+
+
+    # Remove this script
+    rm /etc/init.d/bootonce
+    update-rc.d bootonce remove
+    log_end_msg $?
+
+    # Reboot
+    shutdown -r now
+
+    ;;
+  *)
+    echo "Usage: $0 start" >&2
+    exit 3
+    ;;
+esac

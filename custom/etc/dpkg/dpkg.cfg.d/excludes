@@ -1,0 +1,12 @@
+# Source
+#  - http://raphaelhertzog.com/2010/11/15/save-disk-space-by-excluding-useless-files-with-dpkg/
+
+# Drop locales except English
+path-exclude=/usr/share/locale/*
+path-include=/usr/share/local/en/*
+path-include=/usr/share/locale/locale.alias
+
+# Drop translated manual pages except English
+path-exclude=/usr/share/man/*
+path-include=/usr/share/man/man[1-9]/*
+path-include=/usr/share/man/en*/*

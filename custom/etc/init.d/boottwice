@@ -1,0 +1,69 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides: BootTwice
+# Required-Start:
+# Required-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop:
+# Short-Description: Scripts to run on second boot
+# Description:
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+case "$1" in
+  start)
+    log_daemon_msg "Starting bootonce"
+
+    # Grow the filesystem
+    resize2fs -f /dev/mmcblk0p2
+
+
+    # Check for connectivity
+    ping_recv=`ping -W 1 -c 1 www.google.com | grep ' packets transmitted, ' | awk '{print $4}'`
+
+    if [ "$ping_recv" -eq 1 ]; then
+      # Update apt
+      apt-get update
+
+      # Install common packages
+      apt-get -yqq install tzdata wget curl ca-certificates locales git binutils console-data build-essential
+    fi
+
+
+    # Enable SSH
+    update-rc.d ssh enable
+    invoke-rc.d ssh start
+
+
+    # Set time zone
+    echo "US/Eastern" > /etc/timezone
+    dpkg-reconfigure -f noninteractive tzdata
+
+    # Set language/locale
+    echo "LAN=enUS" > /etc/default/locale
+    dpkg-reconfigure -f noninteractive locales
+
+    # Set keyboard layout
+    echo "XKBMODEL=\"pc104\"" > /etc/default/keyboard
+    echo "XKBLAYOUT=\"us\"" >> /etc/default/keyboard
+    echo "XKBVARIANT=\"\"" >> /etc/default/keyboard
+    echo "XKBOPTIONS=\"\"" >> /etc/default/keyboard
+    echo "BACKSPACE=\"guess\"" >> /etc/default/keyboard
+    dpkg-reconfigure -f noninteractive keyboard-configuration
+
+
+    # Remove this script
+    rm /etc/init.d/boottwice
+    update-rc.d boottwice remove
+    log_end_msg $?
+
+    # Final sync
+    sync
+
+    ;;
+  *)
+    echo "Usage: $0 start" >&2
+    exit 3
+    ;;
+esac
